@@ -28,15 +28,58 @@ async def validate_json(
         raise FailedDecodeJson(f"Check args, URL is invalid\nURL- {bad_url}")
 
 
+
+
+
+
+
 async def get_file_bytes(file: FileT) -> bytes:
-    async with aiofiles.open(file, mode="rb") as f:
-        return await f.read()
+
+    if file.startswith("http"):
+
+        recording = BytesIO()
+        chunk_count = 0
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(file) as resp:
+
+                # record for 250 chunks
+                while chunk_count < 250:
+
+                    chunk = await resp.content.read(1024)
+                    chunk_count += 1
+
+                    if not chunk:
+                        break
+
+                    recording.write(chunk)
+
+                recording.seek(0)
+
+                return recording.read()
+    else:
+        async with aiofiles.open(file, mode="rb") as f:
+            return await f.read()
+
+
 
 
 async def get_song(data: SongT) -> Union[AudioSegment]:
+
     if isinstance(data, (str, pathlib.Path)):
         song_bytes = await get_file_bytes(file=data)
-        return AudioSegment.from_file(BytesIO(song_bytes))
+
+        if data.startswith("http"):
+            sound = AudioSegment.from_file(BytesIO(song_bytes))
+
+            sound = sound.set_channels(1)
+            sound = sound.set_sample_width(2)
+            sound = sound.set_frame_rate(44100)
+
+            # return base64.b64encode(sound.raw_data)
+            return sound
+        else:
+            return AudioSegment.from_file(BytesIO(song_bytes))
 
     if isinstance(data, (bytes, bytearray)):
         return AudioSegment.from_file(BytesIO(data))

@@ -57,7 +57,7 @@ class ShazamUrl:
 
 
 class Request:
-    TIME_ZONE = "Europe/Moscow"
+    TIME_ZONE = "Europe/Greenwich"
 
     def __init__(self, language: str):
         self.language = language
