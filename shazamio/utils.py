@@ -10,6 +10,9 @@ import aiofiles
 import aiohttp
 from aiohttp import ContentTypeError
 from pydub import AudioSegment
+import base64
+import requests
+import time
 
 from shazamio.exceptions import FailedDecodeJson
 from shazamio.schemas.artists import ArtistQuery
@@ -33,30 +36,35 @@ async def validate_json(
 
 
 
-async def get_file_bytes(file: FileT) -> bytes:
+async def get_file_bytes(file: FileT, chunk_size = 256) -> bytes:
 
     if file.startswith("http"):
 
+
+        r = requests.get(file, stream=True)
+
         recording = BytesIO()
+
+        start_time = time.time()
+
+        rec_seconds = 4
+
         chunk_count = 0
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(file) as resp:
-
-                # record for 250 chunks
-                while chunk_count < 250:
-
-                    chunk = await resp.content.read(1024)
-                    chunk_count += 1
-
-                    if not chunk:
-                        break
-
-                    recording.write(chunk)
-
+        for block in r.iter_content(chunk_size):
+            chunk_count += 1
+            recording.write(block)
+            if time.time() - start_time > rec_seconds:
                 recording.seek(0)
+                break
+            # break if larger than 250 chunks
+            if chunk_count > 250:
+                break
 
-                return recording.read()
+        recording.seek(0)
+
+
+
+        return recording.read()
     else:
         async with aiofiles.open(file, mode="rb") as f:
             return await f.read()
@@ -64,21 +72,20 @@ async def get_file_bytes(file: FileT) -> bytes:
 
 
 
-async def get_song(data: SongT) -> Union[AudioSegment]:
+async def get_song(data: SongT, chunk_size=256) -> Union[AudioSegment]:
 
     if isinstance(data, (str, pathlib.Path)):
-        song_bytes = await get_file_bytes(file=data)
+        song_bytes = await get_file_bytes(file=data, chunk_size=chunk_size)
 
         if data.startswith("http"):
             sound = AudioSegment.from_file(BytesIO(song_bytes))
-
             sound = sound.set_channels(1)
             sound = sound.set_sample_width(2)
             sound = sound.set_frame_rate(44100)
 
-            # return base64.b64encode(sound.raw_data)
             return sound
         else:
+
             return AudioSegment.from_file(BytesIO(song_bytes))
 
     if isinstance(data, (bytes, bytearray)):

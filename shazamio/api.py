@@ -313,7 +313,7 @@ class Shazam(Converter, Geo, Request):
         return await self.request("GET", link, headers=self.headers())
 
     async def recognize_song(
-        self, data: Union[str, pathlib.Path, bytes, bytearray, AudioSegment]
+        self, data: Union[str, pathlib.Path, bytes, bytearray, AudioSegment], chunk_size: int = 128
     ) -> Dict[str, Any]:
         """
         Creating a song signature based on a file and searching for this signature in the shazam
@@ -321,8 +321,12 @@ class Shazam(Converter, Geo, Request):
             :param data: Path to song file or bytes
             :return: Dictionary with information about the found song
         """
-        song = await get_song(data=data)
-        audio = self.normalize_audio_data(song)
+        song = await get_song(data=data, chunk_size=chunk_size)
+
+        if (isinstance(data, str) and data.startswith('http')):
+            audio = song
+        else:
+            audio = self.normalize_audio_data(song)
         signature_generator = self.create_signature_generator(audio)
         signature = signature_generator.get_next_signature()
 
